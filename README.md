@@ -1,10 +1,8 @@
 Be sure to edit the FNCONFIG.xml file to specify your options.
 
-=======================
 CAVEAT
 
 The browse buttons have not yet been implemented. The only way to change the images being used is to exit the FLEXWire program, edit the FNCONFIG.xml file manually, then restart the program. This is still a work in progress.
-=======================
 
 There were two pico uf2 files placed in separate directories into the folder that you installed FLEXWire into. One is for the pico W and the other is for the pico 2W. Copy the appropriate file to you pico with the pico in boot load mode. Both of these emulators use the GPIO pins 4 and 5 for uart 1 output which is used in the emulator as the ACIA at $8004 (SWTBUG console).
 
