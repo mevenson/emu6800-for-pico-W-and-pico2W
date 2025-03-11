@@ -1,0 +1,63 @@
+                    PICO W acting as a Pico Probe
+                     (optional if not debugging)
+
+                             ------------------------- To PC for debugging
+                             |
+                   ----------------------
+                   | GP0   |USB|   VBUS |
+                   | GP1   -----   VSYS |
+  ------GND--------| GND           GND  |
+  | ----SWCLK------| GP2           EN   |
+  | | --SWDIO------| GP3           3V3  |
+  | | |            | GP4           VREF |
+  | | |            | GP5           GP28 |
+  | | |            | GND           GND  |
+  | | |            | GP6           GP27 |
+  | | |            | GP7           GP26 |
+  | | |            | GP8           RUN  |
+  | | |            | GP9           GP22 |
+  | | |            | GND           GND  |
+  | | |            | GP10          GP21 |
+  | | |            | GP11          GP20 |
+  | | |            | GP12          GP19 |
+  | | |            | GP13          GP18 |
+  | | |            | GND           GND  |
+  | | |            | GP14          GP17 |
+  | | |            | GP15          GP16 |
+  | | |            ----------------------
+  | | |            
+  | | |            
+  | | |             Target PICO W - 6800
+  | | |            
+  | | |   -------------------------------------------- To FTDI GND
+  | | |   | ------------------------------------------ To FTDI TXD
+  | | |   | | ---------------------------------------- To FTDI RXD
+  | | |   | | |              ------------------------- To power source
+  | | |   | | |              |      (this could also be a USB port on the PC)
+  | | |   | | |              |
+  | | |   | | |    ----------------------
+  | | |   | | |    | GP0   |USB|   VBUS |
+  | | |   | | |    | GP1   -----   VSYS |
+  | | |   | | |    | GND           GND  |
+  | | |   | | |    | GP2           EN   |
+  | | |   | | |    | GP3           3V3  |
+  | | |   | | -----| GP4           VREF |
+  | | |   | -------| GP5           GP28 |
+  | | |   ---------| GND   S   S   GND  |
+  | | |            | GP6   W   W   GP27 |
+  | | |            | GP7   C G D   GP26 |
+  | | |            | GP8   L N I   RUN  |
+  | | |            | GP9   K D O   GP22 |
+  | | |            | GND   o o o   GND  |
+  | | |            | GP10  | | |   GP21 |
+  | | |            | GP11  | | |   GP20 |
+  | | |            | GP12  | | |   GP19 |
+  | | |            | GP13  | | |   GP18 |
+  | | |            | GND   | | |   GND  |
+  | | |            | GP14  | | |   GP17 |
+  | | |            | GP15  | | |   GP16 |
+  | | |            --------| | |---------
+  | | |                    | | |
+  | --|--------------------- | | (also optional if not debugging)
+  ----|----------------------- |
+      --------------------------
