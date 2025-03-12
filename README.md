@@ -11,3 +11,6 @@ Connect GIO4 (pin6 on the pico) to the RXD wire on the FTDI, GPIO5 (pin 7 on the
 When this installer is finished, run the FloppyMaintenance and TV950 installers that were copied to your FLEXWire execution folder.
 
 When editing the FNCONFIG.xml file, you may have start your editor using the administrator mode.
+
+I have added the ability to edit the FNConfig file to the application. You will need adminstrator rights to save the changes to the Program files directory. If you do not want to assign administrator provledges to this application, change the location of the config file in the applications GUI to a file in a directory you do have access to. When you do, this location will be saved to the registery (LOCAL_USER) and that file will be used to load when the application starts. By default the configuration file starts out in the applications execution directory.
+
