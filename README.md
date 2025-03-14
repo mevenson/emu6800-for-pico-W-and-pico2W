@@ -14,3 +14,8 @@ When editing the FNCONFIG.xml file, you may have start your editor using the adm
 
 I have added the ability to edit the configuration file to the application. You will need adminstrator rights to save the changes to the Program files directory. If you do not want to assign administrator privledges to this application, change the location of the config file in the application's GUI to a file in a directory you do have access to. When you do, this location will be saved to the registery (LOCAL_USER) and that file will be used to load the configuration when the application starts. By default the configuration file starts out in the applications execution directory.
 
+NOTES on differences between the TCPIP and the RS232 connections:
+
+  Since the TCPIP connection is NOT using FLEXNet (FNETDRV on the client end) to communicate, but rather is treating the server as a sector server, the client does not have a way to 'mount' images like the connection on the RS232 ports do. So all mounting is done on the server. When you select a drive to be mounted in the TCPIP connection, it is mounted for ALL clients that connect to it on port 6800.
+
+    Also - for this same reason, the RS232 image mounts are NOT maintained when the program exits. Mounting of the images is per port and is completely controlled at the client end. Once the connection has been broken, all mounts need to be re-established. In the case of the RS232 connections, the mounts are per port.
