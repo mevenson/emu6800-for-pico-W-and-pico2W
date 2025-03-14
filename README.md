@@ -1,5 +1,7 @@
 Be sure to edit the FNCONFIG.xml file to specify your options.
 
+![image](https://github.com/user-attachments/assets/d21922ae-c538-4292-b00e-230464867b04)
+
 CAVEAT
 
 The browse buttons have not yet been implemented. The only way to change the images being used is to exit the FLEXWire program, edit the FNCONFIG.xml file manually, then restart the program. This is still a work in progress.
