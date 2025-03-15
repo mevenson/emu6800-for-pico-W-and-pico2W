@@ -31,6 +31,7 @@ typedef struct {
 
     extern uint8_t readMC146818(uint16_t m);
     extern void writeMC146818(uint16_t m, uint8_t c);
+    extern bool init_MC146818();
 #else
     bool got_time;
     bool sendCycles;

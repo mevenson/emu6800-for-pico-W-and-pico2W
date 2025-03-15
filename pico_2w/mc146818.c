@@ -32,6 +32,14 @@
 #define AF          32
 #define UF          16
 
+#define Sunday      = 0
+#define Monday      = 1
+#define Tuesday     = 2
+#define Wednesday   = 3
+#define Thursday    = 4
+#define Friday      = 5
+#define Saturday    = 6
+
 //  
 //     The memory consists of 50 general purpose RAM bytes, 10 RAM bytes which normally contain the time, calendar, 
 //     and alarm data, and four control and status bytes, All 64 bytes are directly readable and writable by the 
@@ -416,69 +424,6 @@ void start_timer(void)
     add_repeating_timer_us(TIMER_FREQ, timer_callback, NULL, &timer);
 }
 
-bool init_MC146818() 
-{
-    got_time = false;
-    sendCycles = false;
-    cyclesExecuted = 0;
-    currentlySelectedRegister = 0;
-
-    ntp_request();
-    while (!got_time)       // wait for the ntp server to return the current time
-    {
-        cyw43_arch_poll();
-        sleep_ms(500);
-    }
-
-    now = started;
-    then = started;
-
-    /* 
-        When RESET is low the following occurs:
-
-            // Register $0B     SET PIE AIE UIE SQWE DM  24/12  DSE
-
-        a) Periodic Interrupt Enable (PIE)      bit is cleared to zero (register B bit 6)
-        b) Alarm Interrupt Enable (AIE)         bit is cleared to zero (register B bit 5)
-        c) Update ended Interrupt Enable (UIE)  bit is cleared to zero (register B bit 4)
-
-            // Register $0C     IRQF PF  AF  UF  O   0   0   0
-
-        d) Update ended Interrupt Flag (UF)     bit is cleared to zero (register C bit 4)
-        e) Interrupt Request status Flag (IRQF) bit is cleared to zero (register C bit 7)
-        f) Periodic Interrupt Flag (PF)         bit is cleared to zero (register C bit 6)
-        g) The part is not accessible.
-        h) Alarm Interrupt Flag (AF)            bit is cleared to zero (register C bit 5)
-
-        i) IRQ pin is in high-impedance state, 
-        j) Square Wave output Enable (SQWE)     bit is cleared to zero (register B bit 3)
-
-     */
-
-    // start out with Daylight Saving Enabled, 24 hour format and datMode = BCD
-
-    regc0b = (uint8_t)HR_24_12 | (uint8_t)DSE;        // leave RegisterBBits.DM = 0
-
-    if ((regc0b & (uint8_t)DM)       == 0) dataModeBinary       = false; else dataModeBinary       = true;
-    if ((regc0b & (uint8_t)HR_24_12) == 0) hourMode24           = false; else hourMode24           = true;
-    if ((regc0b & (uint8_t)DSE)      == 0) dayLightSavingEnable = false; else dayLightSavingEnable = true;
-
-    regc0c = 0x00;
-    regc0d = 0x80;          // turn on VRT (RAM is valid)
-
-    start_timer();
-
-    return true;
-}
-
-#define Sunday      = 0
-#define Monday      = 1
-#define Tuesday     = 2
-#define Wednesday   = 3
-#define Thursday    = 4
-#define Friday      = 5
-#define Saturday    = 6
-
 // typedef struct DateTime
 // {
 //     int year;
@@ -759,3 +704,59 @@ void writeMC146818(uint16_t m, uint8_t c)
         now.sec   = then.sec   = second;
     }
 }
+
+bool init_MC146818() 
+{
+    got_time = false;
+    sendCycles = false;
+    cyclesExecuted = 0;
+    currentlySelectedRegister = 0;
+
+    ntp_request();
+    while (!got_time)       // wait for the ntp server to return the current time
+    {
+        cyw43_arch_poll();
+        sleep_ms(500);
+    }
+
+    now = started;
+    then = started;
+
+    /* 
+        When RESET is low the following occurs:
+
+            // Register $0B     SET PIE AIE UIE SQWE DM  24/12  DSE
+
+        a) Periodic Interrupt Enable (PIE)      bit is cleared to zero (register B bit 6)
+        b) Alarm Interrupt Enable (AIE)         bit is cleared to zero (register B bit 5)
+        c) Update ended Interrupt Enable (UIE)  bit is cleared to zero (register B bit 4)
+
+            // Register $0C     IRQF PF  AF  UF  O   0   0   0
+
+        d) Update ended Interrupt Flag (UF)     bit is cleared to zero (register C bit 4)
+        e) Interrupt Request status Flag (IRQF) bit is cleared to zero (register C bit 7)
+        f) Periodic Interrupt Flag (PF)         bit is cleared to zero (register C bit 6)
+        g) The part is not accessible.
+        h) Alarm Interrupt Flag (AF)            bit is cleared to zero (register C bit 5)
+
+        i) IRQ pin is in high-impedance state, 
+        j) Square Wave output Enable (SQWE)     bit is cleared to zero (register B bit 3)
+
+     */
+
+    // start out with Daylight Saving Enabled, 24 hour format and datMode = BCD
+
+    regc0b = (uint8_t)HR_24_12 | (uint8_t)DSE;        // leave RegisterBBits.DM = 0
+
+    if ((regc0b & (uint8_t)DM)       == 0) dataModeBinary       = false; else dataModeBinary       = true;
+    if ((regc0b & (uint8_t)HR_24_12) == 0) hourMode24           = false; else hourMode24           = true;
+    if ((regc0b & (uint8_t)DSE)      == 0) dayLightSavingEnable = false; else dayLightSavingEnable = true;
+
+    regc0c = 0x00;
+    regc0d = 0x80;          // turn on VRT (RAM is valid)
+
+    start_timer();
+
+    return true;
+}
+

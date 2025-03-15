@@ -1,15 +1,18 @@
 #ifndef FD2
     // these will be made public
-    extern uint16_t initialize_floppy_interface();
+    extern void initialize_floppy_interface();
     extern void FloppyRegisterWrite (uint16_t m, uint8_t b);
     extern uint8_t FloppyRegisterRead(uint16_t m);
 // #else
 //     // these will be private to fd2.c
 //     uint16_t floppyBaseAddress = 0x8014;
+#else
+    // these will be private to fd2.c
+    #define RD_LED_PIN 16
+    #define WR_LED_PIN 17
 #endif
 
 #define floppyBaseAddress 0x8014
-#define TCP_PORT 6800
 
 // define the offsets on the floppy controller to the registers
 #define FDC_DRVREG_OFFSET   0

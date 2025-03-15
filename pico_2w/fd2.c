@@ -4,7 +4,6 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-#include "pico/cyw43_arch.h"
 #include "lwip/pbuf.h"
 #include "lwip/tcp.h"
 
@@ -404,13 +403,18 @@ void initialize_floppy_interface()
     sir[1] = GetGeometry(1);
     sir[2] = GetGeometry(2);
     sir[3] = GetGeometry(3);
+
+     // Initialize the LED pins
+     gpio_init(RD_LED_PIN);    gpio_set_dir(RD_LED_PIN, GPIO_OUT);
+     gpio_init(WR_LED_PIN);    gpio_set_dir(WR_LED_PIN, GPIO_OUT); 
 }
 
 uint16_t BuildAndSendFloppyWriteRequestPacket(uint8_t *responseBuffer)
 {
     uint8_t packetData[7 + 256];        // 6 for the header and 256 for the sector data
 
-    packetData[0] = 'F';                        // this is a floppy request packet
+    gpio_put(WR_LED_PIN, 1);                        // Turn LED on
+    packetData[0] = 'F';                            // this is a floppy request packet
     packetData[1] = m_FDC_CMDRegister;              // request command = read sector
     packetData[2] = m_FDC_DRVRegister &= 0x03;      // set the drive to read from 
     packetData[3] = m_FDC_TRKRegister;              // set the track to read from
@@ -427,6 +431,7 @@ uint16_t BuildAndSendFloppyWriteRequestPacket(uint8_t *responseBuffer)
     uint16_t responseLength = tcp_request(packetData, responseBuffer, sizeof(packetData));
     m_FDC_STATRegister != responseBuffer[0];
 
+    gpio_put(WR_LED_PIN, 0);                        // Turn LED off
     return (responseLength);
 }
 
@@ -434,6 +439,7 @@ uint16_t BuildAndSendFloppyReadRequestPacket(uint8_t *responseBuffer)
 {
     uint8_t packetData[7];
 
+    gpio_put(RD_LED_PIN, 1);                        // Turn LED on
     packetData[0] = 'F';                            // this is a floppy request packet
     packetData[1] = m_FDC_CMDRegister;              // request command = read sector
     packetData[2] = m_FDC_DRVRegister &= 0x03;      // set the drive to read from 
@@ -452,6 +458,7 @@ uint16_t BuildAndSendFloppyReadRequestPacket(uint8_t *responseBuffer)
     // in the response buffer will be the floppy controller status of the operation the 
     // rest will be the contents of the sector requested.
 
+    gpio_put(RD_LED_PIN, 0);                        // Turn LED off
     return (responseLength);
 }
 

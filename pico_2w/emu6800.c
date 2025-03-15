@@ -3,18 +3,19 @@
 #include <string.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <time.h>
+
+#include "pico/stdlib.h"
 #include "pico/cyw43_arch.h"
 #include "lwip/pbuf.h"
 #include "lwip/tcp.h"
-#include <time.h>
-#include "pico/stdlib.h"
 #include "hardware/irq.h"
-#include "tcp.h"
 
-void run_emulator();
-void tcp();
-void initialize_floppy_interface();
-bool init_MC146818();
+#include "cpu.h"
+#include "fd2.h"
+#include "sdcard.h"
+#include "mc146818.h"
+#include "tcp.h"
 
 bool wifiSupported = false;
 bool timeSupported = false;
@@ -134,8 +135,10 @@ int main()
     {
         printf("connecting to internet time server to initialize MC146818\n");
         timeSupported = init_MC146818();
+
         printf("connecting to FLEXNet sector server for floppy and SD Card\n");
         initialize_floppy_interface();
+        initialize_sdcard();
     }
     else
         printf("Failed to initialize the WIFI conneciton for floppy and mc146818\n");

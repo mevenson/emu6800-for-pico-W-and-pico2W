@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <malloc.h>
+#include "pico/stdlib.h"
 
 #include "sdcard.h"
 #include "tcp.h"
@@ -16,6 +17,7 @@ uint16_t BuildAndSendSDCARDWriteRequestPacket (uint8_t *responseBuffer)
     commandRegister = 0x30;
     uint8_t packetData[7+256];
 
+    gpio_put(WR_LED_PIN, 1);                        // Turn LED on
     packetData[0] = 'S';                            // this is an sdcard request packet
     packetData[1] = commandRegister;                // request command = read sector
     packetData[2] = sizeDriveHeadRegister;          // SIZE/DRIVE/HEAD REGISTER
@@ -31,6 +33,7 @@ uint16_t BuildAndSendSDCARDWriteRequestPacket (uint8_t *responseBuffer)
     // send the packet to the server
     uint16_t responseLength = tcp_request(packetData, responseBuffer, sizeof(packetData));
 
+    gpio_put(WR_LED_PIN, 0);                        // Turn LED off
     return (responseLength);    
 }
 
@@ -40,6 +43,7 @@ uint16_t BuildAndSendSDCADReadRequestPacket (uint8_t *responseBuffer)
     commandRegister = 0x20;
     uint8_t packetData[7];
 
+    gpio_put(RD_LED_PIN, 1);                        // Turn LED on
     packetData[0] = 'S';                            // this is an sdcard request packet
     packetData[1] = commandRegister;                // request command = read sector
     packetData[2] = sizeDriveHeadRegister;          // SIZE/DRIVE/HEAD REGISTER
@@ -50,6 +54,7 @@ uint16_t BuildAndSendSDCADReadRequestPacket (uint8_t *responseBuffer)
 
     uint16_t responseLength = tcp_request(packetData, responseBuffer, sizeof(packetData));
 
+    gpio_put(RD_LED_PIN, 0);                        // Turn LED off
     return (responseLength);    
 }
 
@@ -307,5 +312,8 @@ uint8_t SDCARDRegisterRead(uint16_t m)
 
 void initialize_sdcard(int nWhichController, uint8_t *sMemoryBase, uint16_t sBaseAddress, int nRow, bool bInterruptEnabled)
 {
+     // Initialize the LED pins
+     gpio_init(RD_LED_PIN);    gpio_set_dir(RD_LED_PIN, GPIO_OUT);
+     gpio_init(WR_LED_PIN);    gpio_set_dir(WR_LED_PIN, GPIO_OUT); 
 
 }
