@@ -7,6 +7,10 @@
 #else
     //     // these will be private to sdcard.c
 
+    #define RD_LED_PIN 14
+    #define WR_LED_PIN 15
+
+
     uint8_t dataRegister;              // DATA REGISTER
     uint8_t errorRegister;             // ERROR REGISTER
     uint8_t writePrecompRegister;      // WRITE PRECOMP REGISTER
@@ -34,4 +38,3 @@
 #define sdCardWRCommand 0x30    // write command
 
 #define sdcardBaseAddress 0x8008
-#define TCP_PORT 6800
