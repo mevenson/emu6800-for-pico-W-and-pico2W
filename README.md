@@ -24,6 +24,6 @@ NOTES on differences between the TCPIP and the RS232 connections:
     
 ![image](https://github.com/user-attachments/assets/89c73263-9ad1-4f72-a153-557eb9a1da0b)
 
-  In the image below, the top TV950 instance is connected to the pico running emu6800 using the TCP IP connection to FLEXWire and the bottom TV950 instance is connected to my Peripheral Technology PT69-5A connected to FLEXWire through and RS232 port using the COM8 connection.
+  In the image below, the top TV950 instance is connected to the pico running emu6800 using the TCP IP connection to FLEXWire and the bottom TV950 instance is connected to my Peripheral Technology PT69-5A connected to FLEXWire through an RS232 port using the COM8 connection.
   
 ![image](https://github.com/user-attachments/assets/3868d6c3-07cf-45da-8ff3-5ca4f6b008b3)
