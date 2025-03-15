@@ -22,3 +22,4 @@ NOTES on differences between the TCPIP and the RS232 connections:
 
   Also - for this same reason, the RS232 image mounts are NOT maintained when the program exits. Mounting of the images is per port and is completely controlled at the client end. Once the connection has been broken, all mounts need to be re-established. In the case of the RS232 connections, the mounts are per port.
     
+![image](https://github.com/user-attachments/assets/89c73263-9ad1-4f72-a153-557eb9a1da0b)
