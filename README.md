@@ -2,7 +2,9 @@ Be sure to edit the FNCONFIG.xml file to specify your options.
 
 ![image](https://github.com/user-attachments/assets/b8207502-3caa-4209-9c6f-a040c5d9ce60)
 
-CAVEAT
+CAVEATA
+
+The TCP IP connections allow for a second SD Card adapter to be attached to the emulated IDE interface. This is only possible on a real system if you have a second SD Card adapter attached to the SD Card addapter cable from the system's IDE port. I do not beleive this is yet possible with the current IDE card designs available for the SS30 bus.
 
 The browse buttons have now been implemented for the TCP IP connected devices. You will notice that there are no browse buttons for the RS232 port drives. This is because the images for these drives MUST be mounted from the connecting client with the FLEXNet FMOUNT command. The text boxes are there just to show you which images have been mounted. When the configuration file is saved, these mounts are saved with it as a reminder the next time the program is loaded, which drives WERE mounted. After restarting the program, they must be remounted by the client to be valid. You may have to use the resync program on the client before you remount the images.
 
