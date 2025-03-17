@@ -2,7 +2,7 @@ Be sure to edit the FNCONFIG.xml file to specify your options.
 
 ![image](https://github.com/user-attachments/assets/b8207502-3caa-4209-9c6f-a040c5d9ce60)
 
-CAVEATA
+CAVEATS
 
 The TCP IP connections allow for a second SD Card adapter to be attached to the emulated IDE interface. This is only possible on a real system if you have a second SD Card adapter attached to the SD Card addapter cable from the system's IDE port. I do not beleive this is yet possible with the current IDE card designs available for the SS30 bus.
 
