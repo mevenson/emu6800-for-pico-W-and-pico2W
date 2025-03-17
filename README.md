@@ -4,7 +4,7 @@ Be sure to edit the FNCONFIG.xml file to specify your options.
 
 CAVEAT
 
-The browse buttons have not yet been implemented. The only way to change the images being used is to exit the FLEXWire program, edit the FNCONFIG.xml file manually, then restart the program. This is still a work in progress.
+The browse buttons have now been implemented for the TCP IP connected devices. You will notice that there are no browse buttons for the RS232 port drives. This is because the images for these drives MUST be mounted from the connecting client with the FLEXNet FMOUNT command. The text boxes are there just to show you which images have been mounted. When the configuration file is saved, these mounts are saved with it as a reminder the next time the program is loaded, which drives WERE mounted. After restarting the program, they must be remounted by the client to be valid. You may have to use the resync program on the client before you remount the images.
 
 There were two pico uf2 files placed in separate directories into the folder that you installed FLEXWire into. One is for the pico W and the other is for the pico 2W. Copy the appropriate file to you pico with the pico in boot load mode. Both of these emulators use the GPIO pins 4 and 5 for uart 1 output which is used in the emulator as the ACIA at $8004 (SWTBUG console).
 
