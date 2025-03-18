@@ -1,6 +1,6 @@
 Be sure to edit the FNCONFIG.xml file to specify your options.
 
-![image](https://github.com/user-attachments/assets/b8207502-3caa-4209-9c6f-a040c5d9ce60)
+![image](https://github.com/user-attachments/assets/76b9557d-7d63-46ea-8b0d-6341c4b33007)
 
 CAVEATS
 
