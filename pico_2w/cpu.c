@@ -2353,10 +2353,10 @@ void run_emulator()
             }
         }
         execute_instruction();
-        // if (sendCycles)
-        // {
-        //     tcp_request(cyclesPacketData, cyclesResponseBuffer, sizeof(cyclesPacketData));
-        //     sendCycles = false;
-        // }
+        if (sendCycles)
+        {
+            tcp_request(cyclesPacketData, cyclesResponseBuffer, sizeof(cyclesPacketData));
+            sendCycles = false;
+        }
     }
 }
