@@ -35,7 +35,16 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(emu6800 emu6800.c cpu.c newbug.c swtbuga-v1.303.c fd2.c tcp.c mc146818.c sdcard.c)
+add_executable(emu6800 
+    emu6800.c 
+    cpu.c 
+    newbug.c 
+    swtbuga-v1.303.c 
+    swtbug-justtherom.c 
+    fd2.c 
+    tcp.c 
+    mc146818.c 
+    sdcard.c)
 
 pico_set_program_name(emu6800 "emu6800")
 pico_set_program_version(emu6800 "0.1")

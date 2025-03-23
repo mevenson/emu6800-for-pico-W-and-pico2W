@@ -13,6 +13,7 @@
 #include "hardware/timer.h"
 
 #define MC146818
+#include "emu6800.h"
 #include "mc146818.h"
 #include "tcp.h"
 
@@ -358,6 +359,9 @@ uint8_t *IntToBCD5(uint16_t numericvalue)
 //  But leap year, coming once in four,
 //  February then has one day more.
 
+int ticks = 0;
+int reportingInterval = 5;      // number of seconds between sending cycles per second to server
+
 //                   jan feb mar apr may jun jul aug sep oct nov dec                
 int daysInMonth[] = {31, 28, 31, 30, 30, 30, 31, 31, 30, 31, 30, 31};
 bool timer_callback(struct repeating_timer *t)
@@ -405,18 +409,26 @@ bool timer_callback(struct repeating_timer *t)
     regmon = byte_to_bcd(mon);
     regyea = byte_to_bcd(year);
 
-    // send a packet to the FLEXNet server to report the cycles executed this period
-
-    cyclesPacketData[0] = 0xFF;
-    cyclesPacketData[1] = (cyclesExecuted >> 24) & 0xFF;
-    cyclesPacketData[2] = (cyclesExecuted >> 16) & 0xFF;
-    cyclesPacketData[3] = (cyclesExecuted >>  8) & 0xFF;
-    cyclesPacketData[4] = (cyclesExecuted      ) & 0xFF;
-
     regc0c |= (uint8_t)PF;     // set the PF bit to let the chip know that a periodic time interrupt has occured
 
-    cyclesExecuted = 0;     // reset the number of cycles executed in the last second
-    sendCycles = true;      // tell main loop that it is time to send to server
+    // every reportingInterval seconds - show cycles executed by processor in the last 10 seconds
+    if (++ticks % reportingInterval == 0)
+    {
+        ticks = 0;
+
+        cyclesExecuted = cyclesExecuted / reportingInterval;
+
+        // since we only do this every 10 seconds - adjust for average over the last 10 seconds.
+
+        cyclesPacketData[0] = 0xFF;
+        cyclesPacketData[1] = (cyclesExecuted >> 24) & 0xFF;
+        cyclesPacketData[2] = (cyclesExecuted >> 16) & 0xFF;
+        cyclesPacketData[3] = (cyclesExecuted >>  8) & 0xFF;
+        cyclesPacketData[4] = (cyclesExecuted      ) & 0xFF;
+    
+        cyclesExecuted = 0;     // reset the number of cycles executed in the last second
+        sendCycles = true;      // tell main loop that it is time to send to server - we cannot do from within an ISR
+    }
 }
 
 void start_timer(void)
