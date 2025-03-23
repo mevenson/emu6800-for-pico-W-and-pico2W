@@ -8,57 +8,16 @@
 #include "hardware/regs/uart.h"
 #include "hardware/uart.h"
 
+#include "emu6800.h"
+#include "cpu.h"
 #include "tcp.h"
 #include "fd2.h"
 #include "sdcard.h"
 #include "mc146818.h"
 
-extern uint8_t newbug[3150];
-extern uint8_t swtbuga_v1_303[4131];
-
-//  Define 6800 CPU State
-//  We'll create a struct for the 6800 registers and memory:
-
-#define MEMORY_SIZE 0x10000  // 64KB
-
-#define AM_ILLEGAL          0x0080  // Invalid Op Code
-#define AM_DIRECT_6800      0x0040  // direct addressing
-#define AM_RELATIVE_6800    0x0020  // relative addressing
-#define AM_EXTENDED_6800    0x0010  // extended addressing allowed
-#define AM_IMM16_6800       0x0008  // 16 bit immediate
-#define AM_IMM8_6800        0x0004  // 8 bit immediate
-#define AM_INDEXED_6800     0x0002  // indexed addressing allowed
-#define AM_INHERENT_6800    0x0001  // inherent addressing
-
-#define CCR_HALFCARRY   0x20
-#define CCR_INTERRUPT   0x10
-#define CCR_NEGATIVE    0x08
-#define CCR_ZERO        0x04
-#define CCR_OVERFLOW    0x02
-#define CCR_CARRY       0x01
-
-#define CONSOLE uart1
-#define AUXPORT uart0
-
-// these are states to use for loading the ROM image into memory. It is in STX format
-enum states
-{
-    gettingSTX = 0,
-    gettingAddressHi,
-    gettingAddressLo,
-    gettingSize,
-    gettingData
-};
-
-typedef struct 
-{
-    uint8_t  A, B;                  // Accumulators
-    uint16_t X;                     // Index Register
-    uint16_t PC;                    // Program Counter
-    uint16_t SP;                    // Stack Pointer
-    uint8_t  CCR;                   // Condition Code Register
-    uint8_t  memory[MEMORY_SIZE];   // Emulated RAM
-} CPU6800;
+extern uint8_t newbug[3150];            // this is for SWTPC without SD Card
+extern uint8_t swtbug_justtherom[1168]; // this one is for CP68 without SD Card
+extern uint8_t swtbuga_v1_303[4131];    // this if for the PT68-1
 
 CPU6800  cpu;
 uint8_t  _opCode;
@@ -74,15 +33,8 @@ uint16_t _hf = 0;
 
 uint8_t inWait = 0;
 
-typedef struct
-{
-    uint8_t     mneunonic[5];   // the actual mnemonic text
-    uint8_t     OpCode;         // the actual op code
-    uint16_t    attribute;      // Addressing Mode
-    uint8_t     numbytes;       // how many bytes to the instruction
-    uint8_t     cycles;         // how many cycles does it take to execute
-    uint8_t     ccr_rules[6];   // which CCR rules apply
-} opcodeTableEntry;
+//  Define 6800 CPU State
+//  We'll create a struct for the 6800 registers and memory:
 
 const opcodeTableEntry opctbl [256] = 
 {
@@ -2173,52 +2125,23 @@ void execute_instruction()
 
     switch (_attribute)
     {
-        case AM_INHERENT_6800:
-            Execute6800Inherent();
-            break;
-
-        case AM_DIRECT_6800:
-            Execute6800Direct();
-            break;
-
-        case AM_RELATIVE_6800:
-            Execute6800Relative();
-            break;
-
-        case AM_EXTENDED_6800:
-            Execute6800Extended();
-            break;
-
-        case AM_IMM16_6800:
-            Execute6800Immediate16();
-            break;
-
-        case AM_IMM8_6800:
-            Execute6800Immediate8();
-            break;
-
-        case AM_INDEXED_6800:
-            Execute6800Indexed();
-            break;
-
-        case AM_ILLEGAL:
-
-            //Running = false;        // make sure we stop emulation first
-            //CoreDump();             // dump memory
-            //TraceIndex++;           // so we capture the instruction that caused the error.
-            //DumpTraceBuffer();      // dump the trace buffer if we are tracing
-
-            printf("Illegal Addressing Mode detected - aborting\n");
-            break;
+        case AM_INHERENT_6800:  Execute6800Inherent();                                    break;
+        case AM_DIRECT_6800:    Execute6800Direct();                                      break;
+        case AM_RELATIVE_6800:  Execute6800Relative();                                    break;
+        case AM_EXTENDED_6800:  Execute6800Extended();                                    break;
+        case AM_IMM16_6800:     Execute6800Immediate16();                                 break;
+        case AM_IMM8_6800:      Execute6800Immediate8();                                  break;
+        case AM_INDEXED_6800:   Execute6800Indexed();                                     break;
+        case AM_ILLEGAL:        printf("Illegal Addressing Mode detected - aborting\n");  break;
     }
 
-        cyclesExecuted += _cycles;
+    cyclesExecuted += _cycles;
 }
 
 //  Initializing and Running the Emulator
 //      We need a function to load a ROM into memory and start execution:
 
-void load_rom(const uint8_t *rom, uint16_t sizeOfSTX) 
+void load_rom(const uint8_t rom[], uint16_t sizeOfSTX) 
 {
     uint8_t  state   = gettingSTX;
     uint16_t address = 0;
@@ -2258,7 +2181,8 @@ void load_rom(const uint8_t *rom, uint16_t sizeOfSTX)
         }
     }        
 
-    cpu.PC = cpu.memory[0xFFFE] * 256 + cpu.memory[0xFFFF];
+    // we will do this in the main loop now
+    // cpu.PC = cpu.memory[0xFFFE] * 256 + cpu.memory[0xFFFF];
 }
 
 //    The 6800 Condition Code Register (CCR) is an 8-bit register that holds various flags reflecting the state of the 
@@ -2303,13 +2227,6 @@ void load_rom(const uint8_t *rom, uint16_t sizeOfSTX)
 //    LDAA #$00	                    0000 0000	         0 0 - 0 0 - 1 0	Zero flag set.
 //    ADDA #$45 (Overflow occurs)	0110 0000	         0 0 - 0 0 - 0 1	Overflow flag set.
 
-typedef struct BREAKPOINT
-{
-    uint16_t address;
-    char *description;
-    bool printLine;
-} BREAKPOINT;
-
 BREAKPOINT breakpoints [] =
 {
     // 0xBED5, "BED5  B6 8014 READ3      LDA A    >DRVREG                READ FAST STATUS REGISTER"    , false, 
@@ -2320,43 +2237,58 @@ BREAKPOINT breakpoints [] =
     // 0xBF8A, "BF8A  2B 08              BMI      WRIT5                  TEST FOR DRQ"                 , false
 };
 
-void run_emulator() 
-{
-    int numberOfBreakPointEntries = sizeof(breakpoints) / sizeof(BREAKPOINT);    // there are 8 bytes per entry - 4 for 
+// ALL this code got moved to the main emu6800.c file so we could implement a reset and power cycle button
+// void run_emulator() 
+// {
+//     int numberOfBreakPointEntries = sizeof(breakpoints) / sizeof(BREAKPOINT);    // there are 8 bytes per entry - 4 for 
 
-    cpu.A   = 0;
-    cpu.B   = 0;
-    cpu.X   = 0;
-    cpu.SP  = 0;
-    cpu.PC  = 0;
-    cpu.CCR = 0;
+//     cpu.A   = 0;
+//     cpu.B   = 0;
+//     cpu.X   = 0;
+//     cpu.SP  = 0;
+//     cpu.PC  = 0;
+//     cpu.CCR = 0;
 
-    inWait = 0;
+//     inWait = 0;
 
-    //load_rom(newbug, 3150);
-    load_rom(swtbuga_v1_303, 4131);
+//     // we are going to pick the rom to load based on the configuration set by GPIO18 through GPIO21.
+//     //
+//     //      using the following logic:
+//     //
+//     //      configuraiton   0   = swtbuga_v1_303        this is for emulating the PT68-1 (has SD Card)
+//     //                      1   = newbug                this is for emulating SWTPC without SD Card
+//     //                      2   = swtbug_justtherom     this is for emulating CP68 without SD Card
 
-    while (1) 
-    {
-        for (int i = 0; i < numberOfBreakPointEntries; i++)
-        {
-            // before we execute the next instruciton - see if it is in the list of breakpoints
-            if (breakpoints[i].address == cpu.PC)
-            {
-                // if it is - see if we should show the registers and the instruction line from the listing file
-                if (breakpoints[i].printLine)
-                {
-                    // show the registers and the instruction line from the listing file
-                    printf("\n0x%04X: X=%04X A=%02X B=%02X CCR=%02x %s", cpu.PC, cpu.X, cpu.A, cpu.B, cpu.CCR, breakpoints[i].description);
-                }
-                break;
-            }
-        }
-        execute_instruction();
-        if (sendCycles)
-        {
-            tcp_request(cyclesPacketData, cyclesResponseBuffer, sizeof(cyclesPacketData));
-            sendCycles = false;
-        }
-    }
-}
+//     switch (selectedConfiguration)
+//     {
+//         case 0:     printf("loading swtbuga_v1_303\n");     load_rom(swtbuga_v1_303,    sizeof(swtbuga_v1_303));    break;
+//         case 1:     printf("loading newbug\n");             load_rom(newbug,            sizeof(newbug));            break;
+//         case 2:     printf("loading swtbug_justtherom\n");  load_rom(swtbug_justtherom, sizeof(swtbug_justtherom)); break;
+
+//         default:    printf("loading swtbuga_v1_303\n");     load_rom(swtbuga_v1_303,    sizeof(swtbuga_v1_303));    break;
+//     }
+
+//     while (1) 
+//     {
+//         for (int i = 0; i < numberOfBreakPointEntries; i++)
+//         {
+//             // before we execute the next instruciton - see if it is in the list of breakpoints
+//             if (breakpoints[i].address == cpu.PC)
+//             {
+//                 // if it is - see if we should show the registers and the instruction line from the listing file
+//                 if (breakpoints[i].printLine)
+//                 {
+//                     // show the registers and the instruction line from the listing file
+//                     printf("\n0x%04X: X=%04X A=%02X B=%02X CCR=%02x %s", cpu.PC, cpu.X, cpu.A, cpu.B, cpu.CCR, breakpoints[i].description);
+//                 }
+//                 break;
+//             }
+//         }
+//         execute_instruction();
+//         if (sendCycles)
+//         {
+//             tcp_request(cyclesPacketData, cyclesResponseBuffer, sizeof(cyclesPacketData));
+//             sendCycles = false;
+//         }
+//     }
+// }

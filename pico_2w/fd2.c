@@ -12,20 +12,25 @@
 #include "pico/cyw43_arch.h"
  
 #define FD2
+#include "emu6800.h"
 #include "fd2.h"
 #include "tcp.h"
 
 #define PT68_1
 
 /*
-    The way we will implement this is to use the existing code from SWTPCemuApp fd2.cs as possible and replacing the
-    access to the floppy image file with packets sent back and forth to a disk image file server via WiFi. Once the 
-    original fd2.cs code has been converted to .c code, the only other changes that should need to be made are to 
-    build packets to send to the server once a read or write command has been written to the floppy command register.
+    The way we will implement this is to use as much of the existing code from SWTPCemuApp fd2.cs as possible and 
+    replacing the access to the floppy image file with packets sent back and forth to a disk image file server via 
+    WiFi. Once the original fd2.cs code has been converted to .c code, the only other changes that should need to 
+    be made are to build packets to send to the server once a read or write command has been written to the floppy
+    command register.
+
     All other writes to the floppy registers are only to manage the data that will be used to populate the packet
     to be sent to the server. Once the packet has been sent, we will wait for the response from the server signaling 
     completion of the request. Contained in the response will be the status of the request (whether it failed or was
-    a success) and if the request was a read request the 256 byte data buffer will also be returned.
+    a success) and if the request was a read request the data buffer will also be returned. If the geometry will 
+    indicate the number of bytes for the data buffer. We will make sure we have enough room for either 128, 256 or 
+    512 byte sectors.
 
     The format of the packets sent will be as follows:
 
@@ -399,14 +404,19 @@ uint16_t DiskFormat(uint8_t nDrive)
 
 void initialize_floppy_interface()
 {
+    // Initialize the LED pins
+    gpio_init(RD_LED_PIN);    gpio_set_dir(RD_LED_PIN, GPIO_OUT);
+    gpio_init(WR_LED_PIN);    gpio_set_dir(WR_LED_PIN, GPIO_OUT); 
+
+
+    //  currently the server will only support FLEX formatted floppies of the .DSK type. It does not
+    //  support any other file formats or .IMA files. The number of sectors on track 0 must be the
+    //  same as the number of sectors specified in the System Informaiton Record as max_sectors. 
+
     sir[0] = GetGeometry(0);
     sir[1] = GetGeometry(1);
     sir[2] = GetGeometry(2);
     sir[3] = GetGeometry(3);
-
-     // Initialize the LED pins
-     gpio_init(RD_LED_PIN);    gpio_set_dir(RD_LED_PIN, GPIO_OUT);
-     gpio_init(WR_LED_PIN);    gpio_set_dir(WR_LED_PIN, GPIO_OUT); 
 }
 
 uint16_t BuildAndSendFloppyWriteRequestPacket(uint8_t *responseBuffer)

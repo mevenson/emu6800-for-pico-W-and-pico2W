@@ -13,6 +13,7 @@
 #include "hardware/timer.h"
 
 #define MC146818
+#include "emu6800.h"
 #include "mc146818.h"
 #include "tcp.h"
 

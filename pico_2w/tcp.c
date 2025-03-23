@@ -14,6 +14,7 @@
 #include "lwip/tcp.h"
 
 #define TCP
+#include "emu6800.h"
 #include "tcp.h"
  
 struct tcp_pcb *tcp_client_pcb;
