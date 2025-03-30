@@ -63,7 +63,7 @@ typedef struct BREAKPOINT
 #else
 
     extern void load_rom(const uint8_t [], uint16_t);
-    extern void execute_instruction();
+    extern void execute_next_instruction();
 
     extern CPU6800  cpu;
     extern uint8_t  _opCode;

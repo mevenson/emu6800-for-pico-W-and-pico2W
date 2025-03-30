@@ -298,6 +298,7 @@ const opcodeTableEntry opctbl [256] =
     {"STX  ", 0xFF,  AM_EXTENDED_6800,   3,        6,     0,  0,  9, 15, 14,  0}
 };
 
+// ----------------------------------------------------------------------------------
 // The RP2040 UART registers are mapped as follows:
 // 
 //  Register	Function
@@ -307,6 +308,61 @@ const opcodeTableEntry opctbl [256] =
 //  UARTFBRD	Fractional part of baud rate divisor
 //  UARTLCR_H	Line control (parity, stop bits, data length)
 //  UARTCR	    UART Control Register (enable TX/RX)
+// ----------------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------------
+//    The 6800 Condition Code Register (CCR) is an 8-bit register that holds various flags reflecting the state of the 
+//    processor after arithmetic and logical operations. The bit definitions are as follows:
+//
+//    6800 Condition Code Register (CCR) Bits
+//    ---------------------------------------
+//    Bit Position	Name	        Meaning
+//    Bit 7	        S (Sign)	    Set if the result is negative (bit 7 of result = 1).
+//    Bit 6	        X (Half Carry)	Set if there is a carry from bit 3 to bit 4 (used for BCD operations).
+//    Bit 5	        Reserved	    Unused (always 0 on the 6800).
+//    Bit 4	        H (Half Carry)	Duplicate of bit 6 (not separately used in the 6800).
+//    Bit 3	        I (Interrupt)	Set to disable IRQ interrupts.
+//    Bit 2	        N (Negative)	Duplicate of bit 7 (not separately used in the 6800).
+//    Bit 1	        Z (Zero)	    Set if the result is zero.
+//    Bit 0	        V (Overflow)	Set if signed overflow occurs.
+//
+//    Bit Breakdown
+//    -------------
+//    S (Sign) – Reflects the MSB (Most Significant Bit) of the result.
+//        1 if the result is negative.
+//        0 if the result is positive.
+//
+//    X/H (Half Carry) – Used in BCD (Binary-Coded Decimal) arithmetic.
+//        Set when there is a carry from bit 3 to bit 4.
+//
+//    I (Interrupt Disable) – Controls IRQ interrupts.
+//        1 = IRQs disabled.
+//        0 = IRQs enabled.
+//
+//    Z (Zero) – Indicates a zero result.
+//        1 = The result is zero.
+//        0 = The result is non-zero.
+//    
+//    V (Overflow) – Indicates signed arithmetic overflow.
+//        Set when a signed result is out of range (> 127 or < -128).
+//
+//    Example: Condition Code Register After Operations
+//    -------------------------------------------------
+//    Operation	                    Binary Result	CCR (S X - H I - Z V)	Meaning
+//    LDAA #$FF	                    1111 1111	         1 0 - 0 0 - 0 0	Sign flag set (negative result).
+//    LDAA #$00	                    0000 0000	         0 0 - 0 0 - 1 0	Zero flag set.
+//    ADDA #$45 (Overflow occurs)	0110 0000	         0 0 - 0 0 - 0 1	Overflow flag set.
+// ----------------------------------------------------------------------------------
+
+BREAKPOINT breakpoints [] =
+{
+    // 0xBED5, "BED5  B6 8014 READ3      LDA A    >DRVREG                READ FAST STATUS REGISTER"    , false, 
+    // 0xBEDA, "BEDA  27 F9              BEQ      READ3                  TEST FOR DISK BUSY"           , true,
+    // 0xBEE7, "BEE7  F6 8018 ERTST      LDA B    >COMREG                READ STATUS"                  , false, 
+    // 0xBEEE, "BEEE  C5 1C   ER2        BIT B    #$1C                   ONLY TEST  ERROR CONDITIONS"  , true,
+    // 0xBF8E, "BF8E  BD BEE7            JSR      ERTST                  NOT BUSY CHECK FOR ERRORS"    , false,
+    // 0xBF8A, "BF8A  2B 08              BMI      WRIT5                  TEST FOR DRQ"                 , false
+};
 
 bool uart_can_write(uart_inst_t *uart) 
 {
@@ -1061,6 +1117,9 @@ uint8_t AddRegister (uint8_t cReg, uint8_t cOperand)
 }
 // #endregion
 // #region Instruction Executors
+
+//  commented out in leiu of the single switch inline code below where the attribute is passed in
+/*
 void Execute6800Inherent ()
 {
     uint8_t  cReg;
@@ -2093,12 +2152,1041 @@ void Execute6800Relative ()
         cpu.PC = (uint16_t)(cpu.PC + _operand);
     }
 }
+*/
 // #endregion
+
+    // immediate does not use any of these
+
+    uint8_t  cReg;          // used by inherent, extended,indexed
+
+    uint16_t sData;         // used by extended, indexed, direct
+    uint8_t  cData;         // used by extended, indexed, direct
+    uint16_t sBefore;       // used by extended, indexed, direct, immediate16
+    uint16_t sResult;       // used by indexed, direct. immediate16
+    uint16_t sOperandPtr;   // used by indexed
+
+    // these are used by relative addressing mode instructions only
+
+    uint8_t bDoBranch;
+    int nNegative;
+    int nZero;
+    int nOverflow;
+    int nCarry;
+
+void Execute6800Instruction ()
+{
+    if (_attribute == AM_RELATIVE_6800)
+    {
+        bDoBranch = 0;
+        nNegative = (cpu.CCR & CCR_NEGATIVE) == 0 ? 0 : 1;
+        nZero     = (cpu.CCR & CCR_ZERO)     == 0 ? 0 : 1;
+        nOverflow = (cpu.CCR & CCR_OVERFLOW) == 0 ? 0 : 1;
+        nCarry    = (cpu.CCR & CCR_CARRY)    == 0 ? 0 : 1;
+    }
+    else if (_attribute == AM_INDEXED_6800)
+        sOperandPtr = (uint16_t)(_operand + cpu.X);
+
+    // humongous switch to execute the opcode
+    switch (_opCode)
+    {
+        // void Execute6800Inherent () - these are all of the inherent addressing mode opcodes
+
+        case 0x01:     //    "NOP  "
+            break;
+        case 0x06:     //    "TAP  "        Transfer Accumulator to Processor Status
+            cpu.CCR = (uint8_t)(cpu.A | 0xC0);
+            break;
+        case 0x07:     //    "TPA  "        Transfer Processor Status to Accumulator
+            cpu.A = cpu.CCR;
+            break;
+        case 0x08:     //    "INX  "
+            cpu.X++;
+            SetCCR_After(cpu.X);
+            break;
+        case 0x09:     //    "DEX  "
+            cpu.X--;
+            SetCCR_After(cpu.X);
+            break;
+        case 0x0A:     //    "CLV  "
+            cpu.CCR &= (uint8_t)~CCR_OVERFLOW;
+            break;
+        case 0x0B:     //    "SEV  "
+            cpu.CCR |= CCR_OVERFLOW;
+            break;
+        case 0x0C:     //    "CLC  "
+            cpu.CCR &= (uint8_t)~CCR_CARRY;
+            break;
+        case 0x0D:     //    "SEC  "
+            cpu.CCR |= CCR_CARRY;
+            break;
+        case 0x0E:     //    "CLI  "
+            cpu.CCR &= (uint8_t)~CCR_INTERRUPT;
+            break;
+        case 0x0F:     //    "SEI  "
+            cpu.CCR |= CCR_INTERRUPT;
+            break;
+        case 0x10:     //    "SBA  "
+            if (cpu.A < cpu.B)
+                _cf = 1;
+            else
+                _cf = 0;
+            cReg = (uint8_t)(cpu.A - cpu.B);
+            if (
+                ((cpu.A & 0x80) == 0x80 && (cpu.B & 0x80) == 0x00 && (cReg & 0x80) == 0x00) ||
+                ((cpu.A & 0x80) == 0x00 && (cpu.B & 0x80) == 0x80 && (cReg & 0x80) == 0x80)
+               )
+                _vf = 1;
+            else
+                _vf = 0;
+            cpu.A = cReg;
+            SetCCR_After(cpu.A);
+            break;
+        case 0x11:     //    "CBA  "
+            if (cpu.A < cpu.B)
+                _cf = 1;
+            else
+                _cf = 0;
+            cReg = (uint8_t)(cpu.A - cpu.B);
+            if (
+                ((cpu.A & 0x80) == 0x80 && (cpu.B & 0x80) == 0x00 && (cReg & 0x80) == 0x00) ||
+                ((cpu.A & 0x80) == 0x00 && (cpu.B & 0x80) == 0x80 && (cReg & 0x80) == 0x80)
+               )
+                _vf = 1;
+            else
+                _vf = 0;
+            SetCCR_After (cReg);
+            break;
+        case 0x16:     //    "TAB  "
+            cpu.B = cpu.A;
+            SetCCR_After(cpu.B);
+            break;
+        case 0x17:     //    "TBA  "
+            cpu.A = cpu.B;
+            SetCCR_After(cpu.A);
+            break;
+        case 0x19:     //    "DAA  "
+            DecimalAdjustAccumulator ();
+            break;
+        case 0x1B:     //    "ABA  "
+            if ((cpu.A + cpu.B) > 255)
+                _cf = 1;
+            else
+                _cf = 0;
+            if (((cpu.A & 0x0f) + (cpu.B & 0x0f)) > 15)
+                _hf = 1;
+            else
+                _hf = 0;
+            cReg = (uint8_t)(cpu.A + cpu.B);
+            if (
+                ((cpu.A & 0x80) == 0x80 && (cpu.B & 0x80) == 0x80 && (cReg & 0x80) == 0x00) ||
+                ((cpu.A & 0x80) == 0x00 && (cpu.B & 0x80) == 0x00 && (cReg & 0x80) == 0x80)
+               )
+                _vf = 1;
+            else
+                _vf = 0;
+            cpu.A = cReg;
+            SetCCR_After(cpu.A);
+            break;
+        case 0x30:     //    "TSX  "
+            cpu.X = (uint16_t)(cpu.SP + 1);
+            break;
+        case 0x31:     //    "INS  "
+            cpu.SP++;
+            break;
+        case 0x32:     //    "PUL A"
+            cpu.A = LoadMemoryByte(++cpu.SP);
+            break;
+        case 0x33:     //    "PUL B"
+            cpu.B = LoadMemoryByte(++cpu.SP);
+            break;
+        case 0x34:     //    "DES  "
+            cpu.SP--;
+            break;
+        case 0x35:     //    "TXS  "
+            cpu.SP = (uint16_t)(cpu.X - 1);
+            break;
+        case 0x36:     //    "PSH A"
+            StoreMemoryByte(cpu.A, cpu.SP--);
+            break;
+        case 0x37:     //    "PSH B"
+            StoreMemoryByte(cpu.B, cpu.SP--);
+            break;
+        case 0x39:     //    "RTS  "
+            cpu.PC = (uint16_t)(cpu.memory[++cpu.SP] * 256);
+            cpu.PC = (uint16_t)(cpu.PC + cpu.memory[++cpu.SP]);
+            break;
+        case 0x3B:     //    "RTI  "
+            cpu.CCR = cpu.memory[++cpu.SP];
+            cpu.B = cpu.memory[++cpu.SP];
+            cpu.A = cpu.memory[++cpu.SP];
+            cpu.X = (uint16_t)(cpu.memory[++cpu.SP] * 256);
+            cpu.X += (uint16_t)(cpu.memory[++cpu.SP]);
+            cpu.PC = (uint16_t)(cpu.memory[++cpu.SP] * 256);
+            cpu.PC += (uint16_t)(cpu.memory[++cpu.SP]);
+            break;
+        case 0x3E:     //    "WAI  "
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.PC % 256);
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.PC / 256);
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.X % 256);
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.X / 256);
+            cpu.memory[cpu.SP--] = cpu.A;
+            cpu.memory[cpu.SP--] = cpu.B;
+            cpu.memory[cpu.SP--] = cpu.CCR;
+            inWait = 1;
+            break;
+        case 0x3F:     //    "SWI  "
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.PC % 256);
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.PC / 256);
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.X % 256);
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.X / 256);
+            cpu.memory[cpu.SP--] = cpu.A;
+            cpu.memory[cpu.SP--] = cpu.B;
+            cpu.memory[cpu.SP--] = cpu.CCR;
+            cpu.CCR |= CCR_INTERRUPT;
+            cpu.PC = LoadMemoryWord(0xFFFA);
+            break;
+        case 0x40:     //    "NEG R"
+            cpu.A = (uint8_t)(0x00 - cpu.A);
+            SetCCR_After(cpu.A);
+            break;
+        case 0x43:     //    "COM R"
+            cpu.A = (uint8_t)(0xFF - cpu.A);
+            SetCCR_After(cpu.A);
+            break;
+        case 0x44:     //    "LSR R"
+            cReg = cpu.A;
+            _cf = (uint8_t)(cpu.A & 0x01);
+            cpu.A = (uint8_t)((cpu.A >> 1) & 0x7F);        // always set bit 7 to 0
+            SetCCR_BeforeAndAfter(cpu.A, cReg);
+            break;
+        case 0x46:     //    "ROR R"
+            cReg = cpu.A;
+            _cf = (uint8_t)(cpu.A & 0x01);
+            cpu.A = (uint8_t)(cpu.A >> 1);
+            // set bit 7 = old carry flag
+            if ((cpu.CCR & CCR_CARRY) == CCR_CARRY)
+                cpu.A = (uint8_t)(cpu.A | 0x80);
+            else
+                cpu.A = (uint8_t)(cpu.A & 0x7F);
+                SetCCR_BeforeAndAfter(cpu.A, cReg);
+            break;
+        case 0x47:     //    "ASR R"
+            cReg = cpu.A;
+            _cf = (uint8_t)(cpu.A & 0x01);
+            cpu.A = (uint8_t)(cpu.A >> 1);
+            cpu.A = (uint8_t)(cpu.A | (cReg & 0x80));      // preserve the sign bit
+            SetCCR_BeforeAndAfter(cpu.A, cReg);
+            break;
+        case 0x48:     //    "ASL R"
+            cReg = cpu.A;
+            if ((cpu.A & 0x80) == 0x80)
+                _cf = 1;
+            else
+                _cf = 0;
+            cpu.A = (uint8_t)(cpu.A << 1);
+            SetCCR_BeforeAndAfter(cpu.A, cReg);
+            break;
+        case 0x49:     //    "ROL R"
+            cReg = cpu.A;
+            if ((cpu.A & 0x80) == 0x80)
+                _cf = 1;
+            else
+                _cf = 0;
+            cpu.A = (uint8_t)(cpu.A << 1);
+            cpu.A |= (uint8_t)(cpu.CCR & CCR_CARRY);
+            SetCCR_BeforeAndAfter(cpu.A, cReg);
+            break;
+        case 0x4A:     //    "DEC R"
+            cReg = cpu.A;
+            cpu.A = (uint8_t)(cpu.A - 1);
+            SetCCR_BeforeAndAfter(cpu.A, cReg);
+            break;
+        case 0x4C:     //    "INC R"
+            cReg = cpu.A;
+            cpu.A = (uint8_t)(cpu.A + 1);
+            SetCCR_BeforeAndAfter(cpu.A, cReg);
+            break;
+        case 0x4D:     //    "TST R"
+            SetCCR_After(cpu.A);
+            break;
+        case 0x4F:     //    "CLR R"
+            cpu.A = 0x00;
+            SetCCR_After(cpu.A);
+            break;
+        case 0x50:     //    "NEG R"
+            cpu.B = (uint8_t)(0x00 - cpu.B);
+            SetCCR_After(cpu.B);
+            break;
+        case 0x53:     //    "COM R"
+            cpu.B = (uint8_t)(0xFF - cpu.B);
+            SetCCR_After(cpu.B);
+            break;
+        case 0x54:     //    "LSR R"
+            cReg = cpu.B;
+            _cf = (uint8_t)(cpu.B & 0x01);
+            cpu.B = (uint8_t)((cpu.B >> 1) & 0x7F);        // always set bit 7 to 0
+            SetCCR_BeforeAndAfter(cpu.B, cReg);
+            break;
+        case 0x56:     //    "ROR R"
+            cReg = cpu.A;
+            _cf = (uint8_t)(cpu.B & 0x01);
+            cpu.B = (uint8_t)(cpu.B >> 1);
+            // set bit 7 = old carry flag
+            if ((cpu.CCR & CCR_CARRY) == CCR_CARRY)
+                cpu.B = (uint8_t)(cpu.B | 0x80);
+            else
+                cpu.B = (uint8_t)(cpu.B & 0x7F);
+            SetCCR_BeforeAndAfter(cpu.B, cReg);
+            break;
+        case 0x57:     //    "ASR R"
+            cReg = cpu.B;
+            _cf = (uint8_t)(cpu.B & 0x01);
+            cpu.B = (uint8_t)(cpu.B >> 1);
+            cpu.B = (uint8_t)(cpu.B | (cReg & 0x80));      // preserve the sign bit
+            SetCCR_BeforeAndAfter(cpu.B, cReg);
+            break;
+        case 0x58:     //    "ASL R"
+            cReg = cpu.B;
+            if ((cpu.B & 0x80) == 0x80)
+                _cf = 1;
+            else
+                _cf = 0;
+            cpu.B = (uint8_t)(cpu.B << 1);
+            SetCCR_BeforeAndAfter(cpu.B, cReg);
+            break;
+        case 0x59:     //    "ROL R"
+            cReg = cpu.B;
+            if ((cpu.B & 0x80) == 0x80)
+                _cf = 1;
+            else
+                _cf = 0;
+            cpu.B = (uint8_t)(cpu.B << 1);
+            cpu.B |= (uint8_t)(cpu.CCR & CCR_CARRY);
+            SetCCR_BeforeAndAfter(cpu.B, cReg);
+            break;
+        case 0x5A:     //    "DEC R"
+            cReg = cpu.B;
+            cpu.B = (uint8_t)(cpu.B - 1);
+            SetCCR_BeforeAndAfter(cpu.B, cReg);
+            break;
+        case 0x5C:     //    "INC R"
+            cReg = cpu.B;
+            cpu.B = (uint8_t)(cpu.B + 1);
+            SetCCR_BeforeAndAfter(cpu.B, cReg);
+            break;
+        case 0x5D:     //    "TST R"
+            SetCCR_After(cpu.B);
+            break;
+        case 0x5F:     //    "CLR R"
+            cpu.B = 0x00;
+            SetCCR_After(cpu.B);
+            break;
+
+    // void Execute6800Extended () -  - these are all of the extended addressing mode opcodes
+
+        case 0x70:     //    "NEG  "
+            cData = LoadMemoryByte(_operand);
+            cData = (uint8_t)(0x00 - cData);
+            StoreMemoryByte (cData, _operand);
+            SetCCR_After (cData);
+            break;
+        case 0x73:     //    "COM  "
+            cData = LoadMemoryByte(_operand);
+            cData = (uint8_t)(0xFF - cData);
+            StoreMemoryByte (cData, _operand);
+            SetCCR_After (cData);
+            break;
+        case 0x74:     //    "LSR  "
+            cData = LoadMemoryByte(_operand);
+            cReg = cData;
+            _cf = (uint8_t)(cData & 0x01);
+            cData = (uint8_t)((cData >> 1) & 0x7F);        // always set bit 7 to 0
+            StoreMemoryByte (cData, _operand);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x76:     //    "ROR  "
+            cData = LoadMemoryByte(_operand);
+            cReg = cData;
+            _cf = (uint8_t)(cData & 0x01);
+            cData = (uint8_t)(cData >> 1);
+            // set bit 7 = old carry flag
+            if ((cpu.CCR & CCR_CARRY) == CCR_CARRY)
+                cData = (uint8_t)(cData | 0x80);
+            else
+                cData = (uint8_t)(cData & 0x7F);
+            StoreMemoryByte (cData, _operand);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x77:     //    "ASR  "
+            cData = LoadMemoryByte(_operand);
+            cReg = cData;
+            _cf = (uint8_t)(cData & 0x01);
+            cData  = (uint8_t)(cData >> 1);
+            cData = (uint8_t)(cData | (cReg & 0x80));      // preserve the sign bit
+            StoreMemoryByte (cData, _operand);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x78:     //    "ASL  "
+            cData = LoadMemoryByte(_operand);
+            cReg = cData;
+            if ((cData & 0x80) == 0x80)
+                _cf = 1;
+            else
+                _cf = 0;
+            cData  = (uint8_t)(cData << 1);
+            StoreMemoryByte (cData, _operand);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x79:     //    "ROL  "
+            cData = LoadMemoryByte(_operand);
+            cReg = cData;
+            if ((cData & 0x80) == 0x80)
+                _cf = 1;
+            else
+                _cf = 0;
+            cData  = (uint8_t)(cData << 1);
+            cData |= (uint8_t)(cpu.CCR & CCR_CARRY);
+            StoreMemoryByte (cData, _operand);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x7A:     //    "DEC  "
+            cData = LoadMemoryByte(_operand);
+            cReg = cData;
+            cData -= 1;
+            StoreMemoryByte (cData, _operand);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x7C:     //    "INC  "
+            cData = LoadMemoryByte(_operand);
+            cReg = cData;
+            cData += 1;
+            StoreMemoryByte (cData, _operand);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x7D:     //    "TST  "
+            cData = LoadMemoryByte(_operand);
+            SetCCR_After (cData);
+            break;
+        case 0x7E:     //    "JMP  "
+            cpu.PC = _operand;
+            break;
+        case 0x7F:     //    "CLR  "
+            cData = 0x00;
+            StoreMemoryByte (cData, _operand);
+            SetCCR_After (cData);
+            break;
+        case 0xBC:     //    "CPX  "
+            sData = LoadMemoryWord(_operand);
+            sBefore = cpu.X;
+            sResult = (uint16_t)(cpu.X - sData);
+            SetCCR_BeforeAndAfter (sResult, sBefore);
+            break;
+        case 0xBD:     //    "JSR  "
+            // First save current IP
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.PC % 256);
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.PC / 256);
+            // Then load new IP
+            cpu.PC = _operand;
+            break;
+        case 0xBE:     //    "LDS  "
+            cpu.SP = LoadMemoryWord(_operand);
+            SetCCR_After (cpu.SP);
+            break;
+        case 0xBF:     //    "STS  "    
+            StoreMemoryWord(cpu.SP, _operand);
+            SetCCR_After (cpu.SP);
+            break;
+        case 0xFE:     //    "LDX  "
+            cpu.X = LoadMemoryWord(_operand);
+            SetCCR_After(cpu.X);
+            break;
+        case 0xFF:     //    "STX  "
+            StoreMemoryWord(cpu.X, _operand);
+            SetCCR_After(cpu.X);
+            break;
+        // Register A and B Extended Instructions
+        case 0xB0:     //    "SUB R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = SubtractRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xB1:     //    "CMP R"
+            cData = LoadMemoryByte(_operand);
+            CompareRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xB2:     //    "SBC R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = SubtractWithCarryRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xB4:     //    "AND R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = AndRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xB5:     //    "BIT R"
+            cData = LoadMemoryByte(_operand);
+            BitRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xB6:     //    "LDA R"
+            cpu.A = LoadMemoryByte(_operand);
+            SetCCR_After(cpu.A);
+            break;
+        case 0xB7:     //    "STA R"
+            StoreMemoryByte(cpu.A, _operand);
+            SetCCR_After(cpu.A);
+            break;
+        case 0xB8:     //    "EOR R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = ExclusiveOrRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xB9:     //    "ADC R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = AddWithCarryRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xBA:     //    "ORA R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = OrRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xBB:     //    "ADD R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = AddRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xF0:     //    "SUB R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = SubtractRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xF1:     //    "CMP R"
+            cData = LoadMemoryByte(_operand);
+            CompareRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xF2:     //    "SBC R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = SubtractWithCarryRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xF4:     //    "AND R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = AndRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xF5:     //    "BIT R"
+            cData = LoadMemoryByte(_operand);
+            BitRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xF6:     //    "LDA R"
+            cpu.B = LoadMemoryByte(_operand);
+            SetCCR_After(cpu.B);
+            break;
+        case 0xF7:     //    "STA R"
+            StoreMemoryByte(cpu.B, _operand);
+            SetCCR_After(cpu.B);
+            break;
+        case 0xF8:     //    "EOR R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = ExclusiveOrRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xF9:     //    "ADC R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = AddWithCarryRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xFA:     //    "ORA R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = OrRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xFB:     //    "ADD R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = AddRegister(cpu.B, (uint8_t)cData);
+            break;
+
+    // void Execute6800Indexed () -  - these are all of the indexed addressing mode opcodes
+
+        case 0x60:     //    "NEG  "
+            cData = LoadMemoryByte(sOperandPtr);
+            cData = (uint8_t)(0x00 - cData);
+            StoreMemoryByte (cData, sOperandPtr);
+            SetCCR_After (cData);
+            break;
+        case 0x63:     //    "COM  "
+            cData = LoadMemoryByte(sOperandPtr);
+            cData = (uint8_t)(0xFF - cData);
+            StoreMemoryByte (cData, sOperandPtr);
+            SetCCR_After (cData);
+            break;
+        case 0x64:     //    "LSR  "
+            cData = LoadMemoryByte(sOperandPtr);
+            cReg = cData;
+            _cf = (uint8_t)(cData & 0x01);
+            cData = (uint8_t)((cData >> 1) & 0x7F);        // always set bit 7 to 0
+            StoreMemoryByte (cData, sOperandPtr);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x66:     //    "ROR  "
+            cData = LoadMemoryByte(sOperandPtr);
+            cReg = cData;
+            _cf = (uint8_t)(cData & 0x01);
+            cData = (uint8_t)(cData >> 1);
+            // set bit 7 = old carry flag
+            if ((cpu.CCR & CCR_CARRY) == CCR_CARRY)
+                cData = (uint8_t)(cData | 0x80);
+            else
+                cData = (uint8_t)(cData & 0x7F);
+            StoreMemoryByte (cData, sOperandPtr);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x67:     //    "ASR  "
+            cData = LoadMemoryByte(sOperandPtr);
+            cReg = cData;
+            _cf = (uint8_t)(cData & 0x01);
+            cData = (uint8_t)(cData >> 1);
+            cData = (uint8_t)(cData | (cReg & 0x80));      // preserve the sign bit
+            StoreMemoryByte (cData, sOperandPtr);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x68:     //    "ASL  "
+            cData = LoadMemoryByte(sOperandPtr);
+            cReg = cData;
+            if ((cData & 0x80) == 0x80)
+                _cf = 1;
+            else
+                _cf = 0;
+            cData  = (uint8_t)(cData << 1);
+            StoreMemoryByte (cData, sOperandPtr);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x69:     //    "ROL  "
+            cData = LoadMemoryByte(sOperandPtr);
+            cReg = cData;
+            if ((cData & 0x80) == 0x80)
+                _cf = 1;
+            else
+                _cf = 0;
+            cData  = (uint8_t)(cData << 1);
+            cData |= (uint8_t)(cpu.CCR & CCR_CARRY);
+            StoreMemoryByte (cData, sOperandPtr);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x6A:     //    "DEC  "
+            cData = LoadMemoryByte(sOperandPtr);
+            cReg = cData;
+            cData -= 1;
+            StoreMemoryByte (cData, sOperandPtr);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x6C:     //    "INC  "
+            cData = LoadMemoryByte(sOperandPtr);
+            cReg = cData;
+            cData += 1;
+            StoreMemoryByte (cData, sOperandPtr);
+            SetCCR_BeforeAndAfter (cData, cReg);
+            break;
+        case 0x6D:     //    "TST  "
+            cData = LoadMemoryByte(sOperandPtr);
+            SetCCR_After (cData);
+            break;
+        case 0x6E:     //    "JMP  "
+            cpu.PC = sOperandPtr;
+            break;
+        case 0x6F:     //    "CLR  "
+            cData = 0x00;
+            StoreMemoryByte (cData, sOperandPtr);
+            SetCCR_After (cData);
+            break;
+        case 0xAC:     //    "CPX  "
+            sData = LoadMemoryWord(sOperandPtr);
+            sBefore = cpu.X;
+            sResult = (uint16_t)(cpu.X - sData);
+            SetCCR_BeforeAndAfter (sResult, sBefore);
+            break;
+        case 0xAD:     //    "JSR  "
+            // First save current IP
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.PC % 256);
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.PC / 256);
+            // Then load new IP
+            cpu.PC = sOperandPtr;
+            break;
+        case 0xAE:     //    "LDS  "
+            sData = LoadMemoryWord(sOperandPtr);
+            cpu.SP = sData;
+            SetCCR_After (cpu.SP);
+            break;
+        case 0xAF:     //    "STS  "
+            StoreMemoryWord(cpu.SP, sOperandPtr);
+            SetCCR_After (cpu.SP);
+            break;
+        case 0xEE:     //    "LDX  "
+            sData = LoadMemoryWord(sOperandPtr);
+            cpu.X = sData;
+            SetCCR_After(cpu.X);
+            break;
+        case 0xEF:     //    "STX  "
+            StoreMemoryWord(cpu.X, sOperandPtr);
+            SetCCR_After(cpu.X);
+            break;
+        case 0xA0:     //    "SUB R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.A = SubtractRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xA1:     //    "CMP R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.A = CompareRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xA2:     //    "SBC R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.A = SubtractWithCarryRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xA4:     //    "AND R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.A = AndRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xA5:     //    "BIT R"
+            cData = LoadMemoryByte(sOperandPtr);
+            BitRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xA6:     //    "LDA R"
+            cpu.A = LoadMemoryByte(sOperandPtr);
+            SetCCR_After(cpu.A);
+            break;
+        case 0xA7:     //    "STA R"
+            StoreMemoryByte(cpu.A, sOperandPtr);
+            SetCCR_After(cpu.A);
+            break;
+        case 0xA8:     //    "EOR R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.A = ExclusiveOrRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xA9:     //    "ADC R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.A = AddWithCarryRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xAA:     //    "ORA R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.A = OrRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xAB:     //    "ADD R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.A = AddRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xE0:     //    "SUB R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.B = SubtractRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xE1:     //    "CMP R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.B = CompareRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xE2:     //    "SBC R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.B = SubtractWithCarryRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xE4:     //    "AND R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.B = AndRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xE5:     //    "BIT R"
+            cData = LoadMemoryByte(sOperandPtr);
+            BitRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xE6:     //    "LDA R"
+            cpu.B = LoadMemoryByte(sOperandPtr);
+            SetCCR_After(cpu.B);
+            break;
+        case 0xE7:     //    "STA R"
+            StoreMemoryByte(cpu.B, sOperandPtr);
+            SetCCR_After(cpu.B);
+            break;
+        case 0xE8:     //    "EOR R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.B = ExclusiveOrRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xE9:     //    "ADC R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.B = AddWithCarryRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xEA:     //    "ORA R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.B = OrRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xEB:     //    "ADD R"
+            cData = LoadMemoryByte(sOperandPtr);
+            cpu.B = AddRegister(cpu.B, (uint8_t)cData);
+            break;
+
+    // void Execute6800Direct () -  - these are all of the direct page zero addressing mode opcodes
+
+        case 0x9C:  // CPX
+            sData = LoadMemoryWord(_operand);
+            sBefore = cpu.X;
+            sResult = (uint16_t)(cpu.X - sData);
+            SetCCR_BeforeAndAfter (sResult, sBefore);
+            break;
+        case 0x9E:  // LDS
+            sData = LoadMemoryWord(_operand);
+            cpu.SP = sData;
+            SetCCR_After (cpu.SP);
+            break;
+        case 0x9F:  // STS
+            StoreMemoryWord(cpu.SP, _operand);
+            SetCCR_After (cpu.SP);
+            break;
+        case 0xDE:  // LDX
+            sData = LoadMemoryWord(_operand);
+            cpu.X = sData;
+            SetCCR_After(cpu.X);
+            break;
+        case 0xDF:  // STX
+            StoreMemoryWord(cpu.X, _operand);
+            SetCCR_After(cpu.X);
+            break;
+        case 0x90: //    "SUB R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = SubtractRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0x91: //    "CMP R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = CompareRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0x92: //    "SBC R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = SubtractWithCarryRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0x94: //    "AND R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = AndRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0x95: //    "BIT R"
+            cData = LoadMemoryByte(_operand);
+            BitRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0x96: //    "LDA R"
+            cpu.A = LoadMemoryByte(_operand);
+            SetCCR_After(cpu.A);
+            break;
+        case 0x97: //    "STA R"
+            StoreMemoryByte(cpu.A, _operand);
+            SetCCR_After(cpu.A);
+            break;
+        case 0x98: //    "EOR R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = ExclusiveOrRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0x99: //    "ADC R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = AddWithCarryRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0x9A: //    "ORA R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = OrRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0x9B: //    "ADD R"
+            cData = LoadMemoryByte(_operand);
+            cpu.A = AddRegister(cpu.A, (uint8_t)cData);
+            break;
+        case 0xD0: //    "SUB R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = SubtractRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xD1: //    "CMP R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = CompareRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xD2: //    "SBC R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = SubtractWithCarryRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xD4: //    "AND R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = AndRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xD5: //    "BIT R"
+            cData = LoadMemoryByte(_operand);
+            BitRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xD6: //    "LDA R"
+            cpu.B = LoadMemoryByte(_operand);
+            SetCCR_After(cpu.B);
+            break;
+        case 0xD7: //    "STA R"
+            StoreMemoryByte(cpu.B, _operand);
+            SetCCR_After(cpu.B);
+            break;
+        case 0xD8: //    "EOR R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = ExclusiveOrRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xD9: //    "ADC R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = AddWithCarryRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xDA: //    "ORA R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = OrRegister(cpu.B, (uint8_t)cData);
+            break;
+        case 0xDB: //    "ADD R"
+            cData = LoadMemoryByte(_operand);
+            cpu.B = AddRegister(cpu.B, (uint8_t)cData);
+            break;
+
+    // void Execute6800Immediate8 () -  - these are all of the 8 bit immediate addressing mode opcodes
+
+        case 0x80: //    "SUB R", AM_IMM8_6800,       0,  0, 15, 15, 15, 15, 
+            cpu.A = SubtractRegister(cpu.A, (uint8_t)_operand);
+            break;
+        case 0x81: //    "CMP R", AM_IMM8_6800,       0,  0, 15, 15, 15, 15, 
+            cpu.A = CompareRegister(cpu.A, (uint8_t)_operand);
+            break;
+        case 0x82: //    "SBC R", AM_IMM8_6800,       0,  0, 15, 15, 15, 15, 
+            cpu.A = SubtractWithCarryRegister(cpu.A, (uint8_t)_operand);
+            break;
+        case 0x84: //    "AND R", AM_IMM8_6800,       0,  0, 15, 15, 14,  0, 
+            cpu.A = AndRegister(cpu.A, (uint8_t)_operand);
+            break;
+        case 0x85: //    "BIT R", AM_IMM8_6800,       0,  0, 15, 15, 14,  0, 
+            BitRegister(cpu.A, (uint8_t)_operand);
+            break;
+        case 0x86: //    "LDA R", AM_IMM8_6800,       0,  0, 15, 15, 14,  0, 
+            cpu.A = (uint8_t)_operand;
+            SetCCR_After(cpu.A);
+            break;
+        case 0x88: //    "EOR R", AM_IMM8_6800,       0,  0, 15, 15, 14,  0, 
+            cpu.A = ExclusiveOrRegister(cpu.A, (uint8_t)_operand);
+            break;
+        case 0x89: //    "ADC R", AM_IMM8_6800,       15,  0, 15, 15, 15, 15, 
+            cpu.A = AddWithCarryRegister(cpu.A, (uint8_t)_operand);
+            break;
+        case 0x8A: //    "ORA R", AM_IMM8_6800,       0,  0, 15, 15, 14,  0, 
+            cpu.A = OrRegister(cpu.A, (uint8_t)_operand);
+            break;
+        case 0x8B: //    "ADD R", AM_IMM8_6800,       15,  0, 15, 15, 15, 15, 
+            cpu.A = AddRegister(cpu.A, (uint8_t)_operand);
+            break;
+        case 0xC0: //    "SUB R", AM_IMM8_6800,       0,  0, 15, 15, 15, 15, 
+            cpu.B = SubtractRegister(cpu.B, (uint8_t)_operand);
+            break;
+        case 0xC1: //    "CMP R", AM_IMM8_6800,       0,  0, 15, 15, 15, 15, 
+            cpu.B = CompareRegister(cpu.B, (uint8_t)_operand);
+            break;
+        case 0xC2: //    "SBC R", AM_IMM8_6800,       0,  0, 15, 15, 15, 15, 
+            cpu.B = SubtractWithCarryRegister(cpu.B, (uint8_t)_operand);
+            break;
+        case 0xC4: //    "AND R", AM_IMM8_6800,       0,  0, 15, 15, 14,  0, 
+            cpu.B = AndRegister(cpu.B, (uint8_t)_operand);
+            break;
+        case 0xC5: //    "BIT R", AM_IMM8_6800,       0,  0, 15, 15, 14,  0, 
+            BitRegister(cpu.B, (uint8_t)_operand);
+            break;
+        case 0xC6: //    "LDA R", AM_IMM8_6800,       0,  0, 15, 15, 14,  0, 
+            cpu.B = (uint8_t)_operand;
+            SetCCR_After(cpu.B);
+            break;
+        case 0xC8: //    "EOR R", AM_IMM8_6800,       0,  0, 15, 15, 14,  0, 
+            cpu.B = ExclusiveOrRegister(cpu.B, (uint8_t)_operand);
+            break;
+        case 0xC9: //    "ADC R", AM_IMM8_6800,       15,  0, 15, 15, 15, 15, 
+            cpu.B = AddWithCarryRegister(cpu.B, (uint8_t)_operand);
+            break;
+        case 0xCA: //    "ORA R", AM_IMM8_6800,       0,  0, 15, 15, 14,  0, 
+            cpu.B = OrRegister(cpu.B, (uint8_t)_operand);
+            break;
+        case 0xCB: //    "ADD R", AM_IMM8_6800,       15,  0, 15, 15, 15, 15, 
+            cpu.B = AddRegister(cpu.B, (uint8_t)_operand);
+            break;
+
+    // void Execute6800Immediate16 () -  - these are all of the 16 bit immediate addressing mode opcodes
+
+        case 0x8C:  // CPX
+            sBefore = cpu.X;
+            sResult = (uint16_t)(cpu.X - _operand);
+            SetCCR_BeforeAndAfter (sResult, sBefore);
+            break;
+        case 0x8E:  // LDS
+            cpu.SP = _operand;
+            SetCCR_After (cpu.SP);
+            break;
+        case 0xCE:  // LDX
+            cpu.X = _operand;
+            SetCCR_After(cpu.X);
+            break;
+
+    // void Execute6800Relative () -  - these are all of the program counter relative addressing mode opcodes
+
+        case 0x8D:      // BSR
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.PC % 256);      // push return address on the stack
+            cpu.memory[cpu.SP--] = (uint8_t)(cpu.PC / 256);
+            bDoBranch = 1;
+            break;
+        case 0x20:      // BRA
+            bDoBranch = 1;
+            break;
+        case 0x22:      // BHI
+            if ((nCarry | nZero) == 0)
+                bDoBranch = 1;
+            break;
+        case 0x23:      // BLS
+            if ((nCarry | nZero) == 1)
+                bDoBranch = 1;
+            break;
+        case 0x24:      // BCC
+            if (nCarry == 0)
+                bDoBranch = 1;
+            break;
+        case 0x25:      // BCS
+            if (nCarry == 1)
+                bDoBranch = 1;
+            break;
+        case 0x26:      // BNE
+            if (nZero == 0)
+                bDoBranch = 1;
+            break;
+        case 0x27:      // BEQ
+            if (nZero == 1)
+                bDoBranch = 1;
+            break;
+        case 0x28:      // BVC
+            if (nOverflow == 0)
+                bDoBranch = 1;
+            break;
+        case 0x29:      // BVS
+            if (nOverflow == 1)
+                bDoBranch = 1;
+            break;
+        case 0x2A:      // BPL
+            if (nNegative == 0)
+                bDoBranch = 1;
+            break;
+        case 0x2B:      // BMI
+            if (nNegative == 1)
+                bDoBranch = 1;
+            break;
+        case 0x2C:      // BGE
+            if ((nNegative ^ nOverflow) == 0)
+                bDoBranch = 1;
+            break;
+        case 0x2D:      // BLT
+            if ((nNegative ^ nOverflow) == 1)
+                bDoBranch = 1;
+            break;
+        case 0x2E:      // BGT
+            if ((nZero | (nNegative ^ nOverflow)) == 0)
+                bDoBranch = 1;
+            break;
+        case 0x2F:      // BLE
+            if ((nZero | (nNegative ^ nOverflow)) == 1)
+                bDoBranch = 1;
+            break;
+    }
+
+    // if the opcode was a branch - check here to see where we should branch to.
+    if (_attribute == AM_RELATIVE_6800)
+    {
+        if (bDoBranch == 1)
+        {
+            if (_operand > 127)
+                _operand += 0xFF00;
+            cpu.PC = (uint16_t)(cpu.PC + _operand);
+        }
+    }
+}
 
 //  Fetch-Decode-Execute Loop
 //      The main CPU execution loop:
 
-void execute_instruction() 
+void execute_next_instruction() 
 {
     _opCode = cpu.memory[cpu.PC++];
     _cycles = opctbl[_opCode].cycles;
@@ -2123,17 +3211,21 @@ void execute_instruction()
     _hf = 0;
     _vf = 0;
 
-    switch (_attribute)
-    {
-        case AM_INHERENT_6800:  Execute6800Inherent();                                    break;
-        case AM_DIRECT_6800:    Execute6800Direct();                                      break;
-        case AM_RELATIVE_6800:  Execute6800Relative();                                    break;
-        case AM_EXTENDED_6800:  Execute6800Extended();                                    break;
-        case AM_IMM16_6800:     Execute6800Immediate16();                                 break;
-        case AM_IMM8_6800:      Execute6800Immediate8();                                  break;
-        case AM_INDEXED_6800:   Execute6800Indexed();                                     break;
-        case AM_ILLEGAL:        printf("Illegal Addressing Mode detected - aborting\n");  break;
-    }
+    Execute6800Instruction ();
+
+    // this is about 100KHZ slower than a single inline switch implemented above where the attribute is passed in
+    //    
+    // switch (_attribute)
+    // {
+    //     case AM_INHERENT_6800:  Execute6800Inherent();                                    break;
+    //     case AM_DIRECT_6800:    Execute6800Direct();                                      break;
+    //     case AM_RELATIVE_6800:  Execute6800Relative();                                    break;
+    //     case AM_EXTENDED_6800:  Execute6800Extended();                                    break;
+    //     case AM_IMM16_6800:     Execute6800Immediate16();                                 break;
+    //     case AM_IMM8_6800:      Execute6800Immediate8();                                  break;
+    //     case AM_INDEXED_6800:   Execute6800Indexed();                                     break;
+    //     case AM_ILLEGAL:        printf("Illegal Addressing Mode detected - aborting\n");  break;
+    // }
 
     cyclesExecuted += _cycles;
 }
@@ -2181,114 +3273,7 @@ void load_rom(const uint8_t rom[], uint16_t sizeOfSTX)
         }
     }        
 
-    // we will do this in the main loop now
-    // cpu.PC = cpu.memory[0xFFFE] * 256 + cpu.memory[0xFFFF];
+    // we will load the program counter from the RESET vector at 0xFFFE and 0xFFFF in
+    // the main loop now so we can do it again in case the user presses the reset or 
+    // power off/on button
 }
-
-//    The 6800 Condition Code Register (CCR) is an 8-bit register that holds various flags reflecting the state of the 
-//    processor after arithmetic and logical operations. The bit definitions are as follows:
-//
-//    6800 Condition Code Register (CCR) Bits
-//    ---------------------------------------
-//    Bit Position	Name	        Meaning
-//    Bit 7	        S (Sign)	    Set if the result is negative (bit 7 of result = 1).
-//    Bit 6	        X (Half Carry)	Set if there is a carry from bit 3 to bit 4 (used for BCD operations).
-//    Bit 5	        Reserved	    Unused (always 0 on the 6800).
-//    Bit 4	        H (Half Carry)	Duplicate of bit 6 (not separately used in the 6800).
-//    Bit 3	        I (Interrupt)	Set to disable IRQ interrupts.
-//    Bit 2	        N (Negative)	Duplicate of bit 7 (not separately used in the 6800).
-//    Bit 1	        Z (Zero)	    Set if the result is zero.
-//    Bit 0	        V (Overflow)	Set if signed overflow occurs.
-//
-//    Bit Breakdown
-//    -------------
-//    S (Sign) – Reflects the MSB (Most Significant Bit) of the result.
-//        1 if the result is negative.
-//        0 if the result is positive.
-//
-//    X/H (Half Carry) – Used in BCD (Binary-Coded Decimal) arithmetic.
-//        Set when there is a carry from bit 3 to bit 4.
-//
-//    I (Interrupt Disable) – Controls IRQ interrupts.
-//        1 = IRQs disabled.
-//        0 = IRQs enabled.
-//
-//    Z (Zero) – Indicates a zero result.
-//        1 = The result is zero.
-//        0 = The result is non-zero.
-//    
-//    V (Overflow) – Indicates signed arithmetic overflow.
-//        Set when a signed result is out of range (> 127 or < -128).
-//
-//    Example: Condition Code Register After Operations
-//    -------------------------------------------------
-//    Operation	                    Binary Result	CCR (S X - H I - Z V)	Meaning
-//    LDAA #$FF	                    1111 1111	         1 0 - 0 0 - 0 0	Sign flag set (negative result).
-//    LDAA #$00	                    0000 0000	         0 0 - 0 0 - 1 0	Zero flag set.
-//    ADDA #$45 (Overflow occurs)	0110 0000	         0 0 - 0 0 - 0 1	Overflow flag set.
-
-BREAKPOINT breakpoints [] =
-{
-    // 0xBED5, "BED5  B6 8014 READ3      LDA A    >DRVREG                READ FAST STATUS REGISTER"    , false, 
-    // 0xBEDA, "BEDA  27 F9              BEQ      READ3                  TEST FOR DISK BUSY"           , true,
-    // 0xBEE7, "BEE7  F6 8018 ERTST      LDA B    >COMREG                READ STATUS"                  , false, 
-    // 0xBEEE, "BEEE  C5 1C   ER2        BIT B    #$1C                   ONLY TEST  ERROR CONDITIONS"  , true,
-    // 0xBF8E, "BF8E  BD BEE7            JSR      ERTST                  NOT BUSY CHECK FOR ERRORS"    , false,
-    // 0xBF8A, "BF8A  2B 08              BMI      WRIT5                  TEST FOR DRQ"                 , false
-};
-
-// ALL this code got moved to the main emu6800.c file so we could implement a reset and power cycle button
-// void run_emulator() 
-// {
-//     int numberOfBreakPointEntries = sizeof(breakpoints) / sizeof(BREAKPOINT);    // there are 8 bytes per entry - 4 for 
-
-//     cpu.A   = 0;
-//     cpu.B   = 0;
-//     cpu.X   = 0;
-//     cpu.SP  = 0;
-//     cpu.PC  = 0;
-//     cpu.CCR = 0;
-
-//     inWait = 0;
-
-//     // we are going to pick the rom to load based on the configuration set by GPIO18 through GPIO21.
-//     //
-//     //      using the following logic:
-//     //
-//     //      configuraiton   0   = swtbuga_v1_303        this is for emulating the PT68-1 (has SD Card)
-//     //                      1   = newbug                this is for emulating SWTPC without SD Card
-//     //                      2   = swtbug_justtherom     this is for emulating CP68 without SD Card
-
-//     switch (selectedConfiguration)
-//     {
-//         case 0:     printf("loading swtbuga_v1_303\n");     load_rom(swtbuga_v1_303,    sizeof(swtbuga_v1_303));    break;
-//         case 1:     printf("loading newbug\n");             load_rom(newbug,            sizeof(newbug));            break;
-//         case 2:     printf("loading swtbug_justtherom\n");  load_rom(swtbug_justtherom, sizeof(swtbug_justtherom)); break;
-
-//         default:    printf("loading swtbuga_v1_303\n");     load_rom(swtbuga_v1_303,    sizeof(swtbuga_v1_303));    break;
-//     }
-
-//     while (1) 
-//     {
-//         for (int i = 0; i < numberOfBreakPointEntries; i++)
-//         {
-//             // before we execute the next instruciton - see if it is in the list of breakpoints
-//             if (breakpoints[i].address == cpu.PC)
-//             {
-//                 // if it is - see if we should show the registers and the instruction line from the listing file
-//                 if (breakpoints[i].printLine)
-//                 {
-//                     // show the registers and the instruction line from the listing file
-//                     printf("\n0x%04X: X=%04X A=%02X B=%02X CCR=%02x %s", cpu.PC, cpu.X, cpu.A, cpu.B, cpu.CCR, breakpoints[i].description);
-//                 }
-//                 break;
-//             }
-//         }
-//         execute_instruction();
-//         if (sendCycles)
-//         {
-//             tcp_request(cyclesPacketData, cyclesResponseBuffer, sizeof(cyclesPacketData));
-//             sendCycles = false;
-//         }
-//     }
-// }
