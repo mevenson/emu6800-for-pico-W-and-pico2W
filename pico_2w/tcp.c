@@ -145,7 +145,7 @@ uint16_t tcp_request(uint8_t *packetData, uint8_t *responseData, int packetLengt
         }
     }
     else
-        printf("error connecting to FLEXNet Server\n");
+        printf("error connecting to FLEXWire Server\n");
 
     return (responseLength);
 }
