@@ -258,7 +258,7 @@ int main()
         printf("connecting to internet time server to initialize MC146818\n");
         timeSupported = init_MC146818();
 
-        printf("connecting to FLEXNet sector server for floppy and SD Card\n");
+        printf("connecting to FLEXWire sector server for floppy and SD Card\n");
         initialize_floppy_interface();
         initialize_sdcard();
     }
@@ -272,10 +272,10 @@ int main()
     //
     //      This code used to be in the cpu.c file, but I moved it here so I could
     //      intercept the RESET button tied to GPIO8 during the emulation of the
-    //      6800 instruction set. Yhe code to rest needed to be in the main while 
+    //      6800 instruction set. The code to reset needed to be in the main while 
     //      loop and that is here.
 
-    int numberOfBreakPointEntries = sizeof(breakpoints) / sizeof(BREAKPOINT);    // there are 8 bytes per entry - 4 for 
+    int numberOfBreakPointEntries = sizeof(breakpoints) / sizeof(BREAKPOINT);
 
     // we are going to pick the rom to load based on the configuration set by GPIO18 through GPIO21.
     //
