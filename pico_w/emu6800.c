@@ -221,13 +221,7 @@ uint32_t set_configuration ()
 
     // now read them to determin configuration
     uint32_t gpio_pins = gpio_get_all();
-
     selectedConfiguration = (uint8_t)(gpio_pins >> CONFIG_BIT_0) & 0x0000000F;
-
-    // now flip the bits so allopen = 0x00 and all tied to +3.3 = 0x0f
-    // only the lower 4 bits are used.
-
-    //selectedConfiguration ^= 0x0F;
 
     return gpio_pins;
 }
@@ -277,7 +271,7 @@ int main()
     // run the emulator - run_emulator();
     //
     //      This code used to be in the cpu.c file, but I moved it here so I could
-    //      intercept the REST button tied to GPIO8 during the emulation of the
+    //      intercept the RESET button tied to GPIO8 during the emulation of the
     //      6800 instruction set. Yhe code to rest needed to be in the main while 
     //      loop and that is here.
 
@@ -326,6 +320,9 @@ int main()
         // Using the watchdog_reset - resets the CPU and basically starts over
         // with the debugger disconnected - not what we want when debugging
         // this is equicalent to a power cycle on the 6800 CPU
+        //
+        //      reading the GPIO pin state takes anywhere from 10-200 ns. In most cases it is 100ns.
+        //      so doing this here does not really cost that much in execution time for the 6800.
 
         if (gpio_get(POWER_CYCLE_PIN) == 0) 
         {
@@ -363,7 +360,7 @@ int main()
                     break;
                 }
             }
-            execute_instruction();
+            execute_next_instruction();
             if (sendCycles)
             {
                 tcp_request(cyclesPacketData, cyclesResponseBuffer, sizeof(cyclesPacketData));
@@ -371,5 +368,4 @@ int main()
             }
         }
     }
-
 }
